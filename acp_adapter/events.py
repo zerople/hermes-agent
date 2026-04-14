@@ -35,9 +35,9 @@ def _send_update(
         future = asyncio.run_coroutine_threadsafe(
             conn.session_update(session_id, update), loop
         )
-        future.result(timeout=5)
+        future.result(timeout=30)
     except Exception:
-        logger.debug("Failed to send ACP update", exc_info=True)
+        logger.warning("Failed to send ACP update", exc_info=True)
 
 
 # ------------------------------------------------------------------
