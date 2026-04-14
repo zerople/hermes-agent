@@ -10,6 +10,7 @@ thread while the event loop lives on the main thread).
 import asyncio
 import json
 import logging
+import time
 from collections import deque
 from typing import Any, Callable, Deque, Dict
 
@@ -24,20 +25,37 @@ from .tools import (
 logger = logging.getLogger(__name__)
 
 
+_MAX_RETRIES = 3
+_BASE_DELAY = 1.0
+
+
 def _send_update(
     conn: acp.Client,
     session_id: str,
     loop: asyncio.AbstractEventLoop,
     update: Any,
 ) -> None:
-    """Fire-and-forget an ACP session update from a worker thread."""
-    try:
-        future = asyncio.run_coroutine_threadsafe(
-            conn.session_update(session_id, update), loop
-        )
-        future.result(timeout=30)
-    except Exception:
-        logger.warning("Failed to send ACP update", exc_info=True)
+    """Send an ACP session update from a worker thread with retry."""
+    for attempt in range(_MAX_RETRIES):
+        try:
+            future = asyncio.run_coroutine_threadsafe(
+                conn.session_update(session_id, update), loop
+            )
+            future.result(timeout=30)
+            return
+        except Exception:
+            if attempt < _MAX_RETRIES - 1:
+                delay = _BASE_DELAY * (2 ** attempt)
+                logger.warning(
+                    "ACP update delivery failed (attempt %d/%d), retrying in %.1fs",
+                    attempt + 1, _MAX_RETRIES, delay, exc_info=True,
+                )
+                time.sleep(delay)
+            else:
+                logger.error(
+                    "ACP update delivery failed after %d attempts, dropping update",
+                    _MAX_RETRIES, exc_info=True,
+                )
 
 
 # ------------------------------------------------------------------
