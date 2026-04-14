@@ -482,6 +482,9 @@ class ClaudeACPClient:
                 {
                     "cwd": self._acp_cwd,
                     "mcpServers": [],
+                    "_meta": {
+                        "disableBuiltInTools": True,
+                    },
                 },
             ) or {}
             session_id = str(session.get("sessionId") or "").strip()
