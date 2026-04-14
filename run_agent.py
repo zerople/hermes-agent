@@ -898,7 +898,7 @@ class AIAgent:
                 # Explicit credentials from CLI/gateway — construct directly.
                 # The runtime provider resolver already handled auth for us.
                 client_kwargs = {"api_key": api_key, "base_url": base_url}
-                if self.provider == "copilot-acp":
+                if self.provider in ("copilot-acp", "claude-acp"):
                     client_kwargs["command"] = self.acp_command
                     client_kwargs["args"] = self.acp_args
                 effective_base = base_url
@@ -4106,12 +4106,28 @@ class AIAgent:
         return False
 
     def _create_openai_client(self, client_kwargs: dict, *, reason: str, shared: bool) -> Any:
-        if self.provider == "copilot-acp" or str(client_kwargs.get("base_url", "")).startswith("acp://copilot"):
+        provider = str(self.provider or "")
+        effective_base = str(client_kwargs.get("base_url", ""))
+        if provider == "copilot-acp" or effective_base.startswith("acp://copilot"):
             from agent.copilot_acp_client import CopilotACPClient
 
             client = CopilotACPClient(**client_kwargs)
             logger.info(
                 "Copilot ACP client created (%s, shared=%s) %s",
+                reason,
+                shared,
+                self._client_log_context(),
+            )
+            return client
+        if provider == "claude-acp" or effective_base.startswith("acp://claude"):
+            from agent.claude_acp_client import ClaudeACPClient
+
+            client = ClaudeACPClient(**client_kwargs)
+            # ACP subprocess protocol doesn't support streaming — disable
+            # proactively so the main loop doesn't waste a retry attempting it.
+            self._disable_streaming = True
+            logger.info(
+                "Claude ACP client created (%s, shared=%s) %s",
                 reason,
                 shared,
                 self._client_log_context(),

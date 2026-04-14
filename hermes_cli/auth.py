@@ -20,6 +20,21 @@ import logging
 import os
 import shutil
 import shlex
+
+
+def _which_with_fallback(command: str) -> str | None:
+    """shutil.which with fallback to common node/local bin dirs."""
+    resolved = shutil.which(command) if command else None
+    if not resolved and command:
+        for candidate_dir in (
+            os.path.expanduser("~/.hermes/node/bin"),
+            os.path.expanduser("~/.local/bin"),
+            "/usr/local/bin",
+        ):
+            candidate = os.path.join(candidate_dir, command)
+            if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+                return candidate
+    return resolved
 import stat
 import base64
 import hashlib
@@ -97,6 +112,11 @@ class ProviderConfig:
     api_key_env_vars: tuple = ()
     # Optional env var for base URL override
     base_url_env_var: str = ""
+    # For external-process providers
+    command_env_vars: tuple = ()
+    default_command: str = ""
+    args_env_var: str = ""
+    default_args: tuple = ()
 
 
 PROVIDER_REGISTRY: Dict[str, ProviderConfig] = {
@@ -135,6 +155,17 @@ PROVIDER_REGISTRY: Dict[str, ProviderConfig] = {
         auth_type="external_process",
         inference_base_url=DEFAULT_COPILOT_ACP_BASE_URL,
         base_url_env_var="COPILOT_ACP_BASE_URL",
+    ),
+    "claude-acp": ProviderConfig(
+        id="claude-acp",
+        name="Claude Code ACP",
+        auth_type="external_process",
+        inference_base_url="acp://claude",
+        base_url_env_var="CLAUDE_ACP_BASE_URL",
+        command_env_vars=("HERMES_CLAUDE_ACP_COMMAND", "CLAUDE_CLI_PATH"),
+        default_command="claude-agent-acp",
+        args_env_var="HERMES_CLAUDE_ACP_ARGS",
+        default_args=(),
     ),
     "gemini": ProviderConfig(
         id="gemini",
@@ -905,6 +936,7 @@ def resolve_provider(
         "github": "copilot", "github-copilot": "copilot",
         "github-models": "copilot", "github-model": "copilot",
         "github-copilot-acp": "copilot-acp", "copilot-acp-agent": "copilot-acp",
+        "claude-acp-agent": "claude-acp", "claude-code-acp": "claude-acp",
         "aigateway": "ai-gateway", "vercel": "ai-gateway", "vercel-ai-gateway": "ai-gateway",
         "opencode": "opencode-zen", "zen": "opencode-zen",
         "qwen-portal": "qwen-oauth", "qwen-cli": "qwen-oauth", "qwen-oauth": "qwen-oauth",
@@ -2393,18 +2425,20 @@ def get_external_process_provider_status(provider_id: str) -> Dict[str, Any]:
     if not pconfig or pconfig.auth_type != "external_process":
         return {"configured": False}
 
-    command = (
-        os.getenv("HERMES_COPILOT_ACP_COMMAND", "").strip()
-        or os.getenv("COPILOT_CLI_PATH", "").strip()
-        or "copilot"
-    )
-    raw_args = os.getenv("HERMES_COPILOT_ACP_ARGS", "").strip()
-    args = shlex.split(raw_args) if raw_args else ["--acp", "--stdio"]
+    command = ""
+    for env_var in pconfig.command_env_vars or ():
+        command = os.getenv(env_var, "").strip()
+        if command:
+            break
+    if not command:
+        command = pconfig.default_command or provider_id
+    raw_args = os.getenv(pconfig.args_env_var, "").strip() if pconfig.args_env_var else ""
+    args = shlex.split(raw_args) if raw_args else list(pconfig.default_args if pconfig.default_args is not None else ("--acp", "--stdio"))
     base_url = os.getenv(pconfig.base_url_env_var, "").strip() if pconfig.base_url_env_var else ""
     if not base_url:
         base_url = pconfig.inference_base_url
 
-    resolved_command = shutil.which(command) if command else None
+    resolved_command = _which_with_fallback(command)
     return {
         "configured": bool(resolved_command or base_url.startswith("acp+tcp://")),
         "provider": provider_id,
@@ -2426,10 +2460,10 @@ def get_auth_status(provider_id: Optional[str] = None) -> Dict[str, Any]:
         return get_codex_auth_status()
     if target == "qwen-oauth":
         return get_qwen_auth_status()
-    if target == "copilot-acp":
+    pconfig = PROVIDER_REGISTRY.get(target)
+    if pconfig and pconfig.auth_type == "external_process":
         return get_external_process_provider_status(target)
     # API-key providers
-    pconfig = PROVIDER_REGISTRY.get(target)
     if pconfig and pconfig.auth_type == "api_key":
         return get_api_key_provider_status(target)
     return {"logged_in": False}
@@ -2487,20 +2521,24 @@ def resolve_external_process_provider_credentials(provider_id: str) -> Dict[str,
     if not base_url:
         base_url = pconfig.inference_base_url
 
-    command = (
-        os.getenv("HERMES_COPILOT_ACP_COMMAND", "").strip()
-        or os.getenv("COPILOT_CLI_PATH", "").strip()
-        or "copilot"
-    )
-    raw_args = os.getenv("HERMES_COPILOT_ACP_ARGS", "").strip()
-    args = shlex.split(raw_args) if raw_args else ["--acp", "--stdio"]
-    resolved_command = shutil.which(command) if command else None
+    command = ""
+    for env_var in pconfig.command_env_vars or ():
+        command = os.getenv(env_var, "").strip()
+        if command:
+            break
+    if not command:
+        command = pconfig.default_command or provider_id
+    raw_args = os.getenv(pconfig.args_env_var, "").strip() if pconfig.args_env_var else ""
+    args = shlex.split(raw_args) if raw_args else list(pconfig.default_args if pconfig.default_args is not None else ("--acp", "--stdio"))
+    resolved_command = _which_with_fallback(command)
     if not resolved_command and not base_url.startswith("acp+tcp://"):
+        provider_label = pconfig.name or provider_id
+        env_hint = ", ".join(pconfig.command_env_vars or ())
         raise AuthError(
-            f"Could not find the Copilot CLI command '{command}'. "
-            "Install GitHub Copilot CLI or set HERMES_COPILOT_ACP_COMMAND/COPILOT_CLI_PATH.",
+            f"Could not find the {provider_label} command '{command}'. "
+            f"Install/configure it or set one of: {env_hint}.",
             provider=provider_id,
-            code="missing_copilot_cli",
+            code=f"missing_{provider_id.replace('-', '_')}_cli",
         )
 
     return {

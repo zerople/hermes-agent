@@ -102,6 +102,11 @@ _PROVIDER_MODELS: dict[str, list[str]] = {
     "copilot-acp": [
         "copilot-acp",
     ],
+    "claude-acp": [
+        "claude-opus-4-6",
+        "claude-sonnet-4-6",
+        "claude-haiku-4-5-20251001",
+    ],
     "copilot": [
         "gpt-5.4",
         "gpt-5.4-mini",
@@ -515,6 +520,7 @@ CANONICAL_PROVIDERS: list[ProviderEntry] = [
     ProviderEntry("huggingface",  "Hugging Face",             "top",      "Hugging Face Inference Providers (20+ open models)"),
     # -- Extended tier (behind "More..." in hermes model) --
     ProviderEntry("copilot-acp",    "GitHub Copilot ACP",       "extended", "GitHub Copilot ACP (spawns `copilot --acp --stdio`)"),
+    ProviderEntry("claude-acp",     "Claude Code ACP",          "extended", "Claude Code ACP (spawns `claude-agent-acp` — uses claude.ai OAuth)"),
     ProviderEntry("gemini",         "Google AI Studio",         "extended", "Google AI Studio (Gemini models — OpenAI-compatible endpoint)"),
     ProviderEntry("deepseek",       "DeepSeek",                 "extended", "DeepSeek (DeepSeek-V3, R1, coder — direct API)"),
     ProviderEntry("xai",            "xAI",                      "extended", "xAI (Grok models — direct API)"),
@@ -546,6 +552,8 @@ _PROVIDER_ALIASES = {
     "github-model": "copilot",
     "github-copilot-acp": "copilot-acp",
     "copilot-acp-agent": "copilot-acp",
+    "claude-acp-agent": "claude-acp",
+    "claude-code-acp": "claude-acp",
     "google": "gemini",
     "google-gemini": "gemini",
     "google-ai-studio": "gemini",
@@ -1227,6 +1235,8 @@ def provider_model_ids(provider: Optional[str], *, force_refresh: bool = False) 
             pass
         if normalized == "copilot-acp":
             return list(_PROVIDER_MODELS.get("copilot", []))
+    if normalized == "claude-acp":
+        return list(_PROVIDER_MODELS.get("claude-acp", []))
     if normalized == "nous":
         # Try live Nous Portal /models endpoint
         try:

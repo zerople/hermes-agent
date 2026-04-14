@@ -68,6 +68,8 @@ _AGGREGATOR_PROVIDERS: frozenset[str] = frozenset({
 # Providers that want bare names with dots replaced by hyphens.
 _DOT_TO_HYPHEN_PROVIDERS: frozenset[str] = frozenset({
     "anthropic",
+    "claude-acp",
+    "opencode-zen",
 })
 
 # Providers that want bare names with dots preserved.
