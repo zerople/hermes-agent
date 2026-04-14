@@ -126,7 +126,7 @@ def _format_messages_as_prompt(
     if transcript:
         sections.append("Conversation transcript:\n\n" + "\n\n".join(transcript))
 
-    sections.append("Continue the conversation from the latest user request.")
+
     return "\n\n".join(section.strip() for section in sections if section and section.strip())
 
 
