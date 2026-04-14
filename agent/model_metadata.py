@@ -253,7 +253,11 @@ def _is_known_provider_base_url(base_url: str) -> bool:
 
 
 def is_local_endpoint(base_url: str) -> bool:
-    """Return True if base_url points to a local machine (localhost / RFC-1918 / WSL)."""
+    """Return True if base_url points to a local machine (localhost / RFC-1918 / WSL / ACP subprocess)."""
+    # ACP scheme means a local subprocess — always treat as local so the
+    # stale-call detector uses an infinite timeout instead of 300s.
+    if base_url and str(base_url).startswith("acp://"):
+        return True
     normalized = _normalize_base_url(base_url)
     if not normalized:
         return False
