@@ -4123,9 +4123,12 @@ class AIAgent:
             from agent.claude_acp_client import ClaudeACPClient
 
             client = ClaudeACPClient(**client_kwargs)
-            # ACP subprocess protocol doesn't support streaming — disable
-            # proactively so the main loop doesn't waste a retry attempting it.
+            # ACP subprocess protocol doesn't support OpenAI-style streaming,
+            # but it streams internally via session/update chunks.
+            # Wire up chunk callbacks so text reaches the user in real-time.
             self._disable_streaming = True
+            client.on_text_chunk = self._fire_stream_delta
+            client.on_reasoning_chunk = self._fire_reasoning_delta
             logger.info(
                 "Claude ACP client created (%s, shared=%s) %s",
                 reason,

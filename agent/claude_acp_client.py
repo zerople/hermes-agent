@@ -280,6 +280,8 @@ class ClaudeACPClient:
         self.is_closed = False
         self._active_process: subprocess.Popen[str] | None = None
         self._active_process_lock = threading.Lock()
+        self.on_text_chunk: Any = None
+        self.on_reasoning_chunk: Any = None
 
     def close(self) -> None:
         proc: subprocess.Popen[str] | None
@@ -527,10 +529,22 @@ class ClaudeACPClient:
             chunk_text = ""
             if isinstance(content, dict):
                 chunk_text = str(content.get("text") or "")
-            if kind == "agent_message_chunk" and chunk_text and text_parts is not None:
-                text_parts.append(chunk_text)
-            elif kind == "agent_thought_chunk" and chunk_text and reasoning_parts is not None:
-                reasoning_parts.append(chunk_text)
+            if kind == "agent_message_chunk" and chunk_text:
+                if text_parts is not None:
+                    text_parts.append(chunk_text)
+                if self.on_text_chunk:
+                    try:
+                        self.on_text_chunk(chunk_text)
+                    except Exception:
+                        pass
+            elif kind == "agent_thought_chunk" and chunk_text:
+                if reasoning_parts is not None:
+                    reasoning_parts.append(chunk_text)
+                if self.on_reasoning_chunk:
+                    try:
+                        self.on_reasoning_chunk(chunk_text)
+                    except Exception:
+                        pass
             return True
 
         if process.stdin is None:

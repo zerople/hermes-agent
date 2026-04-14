@@ -409,6 +409,7 @@ class HermesACPAgent(acp.Agent):
         agent.thinking_callback = thinking_cb
         agent.step_callback = step_cb
         agent.message_callback = message_cb
+        agent.stream_delta_callback = message_cb
 
         if approval_cb:
             try:
