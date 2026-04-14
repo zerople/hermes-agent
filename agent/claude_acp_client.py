@@ -9,6 +9,7 @@ back into the minimal shape Hermes expects from an OpenAI client.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import queue
 import re
@@ -581,11 +582,15 @@ class ClaudeACPClient:
             except Exception as exc:
                 response = _jsonrpc_error(message_id, -32602, str(exc))
         else:
-            response = _jsonrpc_error(
-                message_id,
-                -32601,
-                f"ACP client method '{method}' is not supported by Hermes yet.",
+            logging.getLogger("hermes.claude_acp").debug(
+                "Unhandled ACP client method '%s' — returning empty success to keep subprocess alive",
+                method,
             )
+            response = {
+                "jsonrpc": "2.0",
+                "id": message_id,
+                "result": {},
+            }
 
         process.stdin.write(json.dumps(response) + "\n")
         process.stdin.flush()
